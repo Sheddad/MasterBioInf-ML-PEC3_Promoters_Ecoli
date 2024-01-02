@@ -1,0 +1,526 @@
+---
+title: "PEC 3 Machine Learning"
+author: "Sheddad Kaid-Salah Ferrón"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: no
+    toc_depth: 3
+    theme: flatly
+    number_sections: false
+    csl: vancouver.csl
+  pdf_document:
+    toc: yes
+params:
+  date: !r Sys.Date()
+  printcode:
+    label: "Display Code:"
+    value: TRUE # or set it to FALSE
+  data:
+    label: "Input dataset:"
+    value: promoters.txt
+    input: file
+  folder.data: ""
+  p.train: !r 2/3
+  subtitulo: Prediicción de promotores E.coli
+  seed: 12345
+nocite: |
+  @lantz2015machine
+  @HarleyReynolds1987
+bibliography: PEC_3_ML.bib
+geometry: margin=2cm
+---
+
+```{r class.source = 'fold-hide', setup, include=FALSE}
+# Parametrizamos
+require(knitr)
+require(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=params$printcode,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+Sys.setlocale("LC_TIME", "C")
+```
+
+``` {r paquetes, include=FALSE}
+# Instalamos paquetes, si no lo están, en caso de ser requeridos
+if(!(require(knitr))) install.packages("knitr")
+if(!(require(rmdformats))) install.packages("rmdformats")
+if(!(require(kernlab))) install.packages("kernlab")
+if(!(require(caret))) install.packages("caret")
+if(!(require(bibtex))) install.packages("bibtex")
+```
+
+
+```{r ficheros, include=FALSE}
+# Fichero human_data.txt con los datos de las secuencias con la clase de proteínas 
+# Lo hacemos parametrizado
+data <- params$data
+```
+
+-----------------------------------------------------------
+
+# 1. SVM
+
+**Escribir en el informe una sección con el título “Algoritmo Support Vector 
+Machine” en el que se haga una breve explicación de su funcionamiento y sus 
+características y además, se presente una tabla de sus fortaleza y debilidades.**
+
+## Algoritmo Support Vector Machine (SVM)
+  
+Las Máquinas de Soporte Vectorial (SVM, por sus siglas en inglés) son un 
+conjunto de métodos supervisados de aprendizaje automático utilizados 
+principalmente para tareas de clasificación y regresión.  
+  
+Estos algoritmos intentan dividir los datos de manera que haya un margen máximo
+entre las categorías y se distribuyan de manera uniforme. Su funcionamiento se 
+centra en la determinación de hiperplanos dentro de un espacio de múltiples 
+dimensiones, que se forma a partir de las diversas características de los datos.
+  
+El término *"Máquinas de Soporte Vectorial"* proviene del hecho de que las 
+observaciones más cercanas al hiperplano de separación, pertenecientes a cada 
+clase, son las que definen dicho hiperplano. Estas observaciones son conocidas 
+como vectores de soporte.
+
+Cuando los datos no son separables de forma lineal, se utilizan *kernels* 
+(funciones de similitud) y un parámetro C, que hay que especificar a base de 
+ensayo/error, para minimizar la función de coste.  
+  
+Los kernels más populares son el lineal y el gausiano, con los que trabajaremos 
+en esta práctica.
+
+
+## Tabla de fortalezas y debilidades de SVM
+
+Fortalezas|Debilidades
+:----|:----|
+Se puede utilizar para clasificación o problemas de predicción numérica|Encontrar el mejor modelo requiere pruebas de varias combinaciones de kernels y parámetros del modelo (prueba y error)  
+Funciona de forma óptima con ruido y no es muy propenso al sobreajuste (overfiting)|Puede ser lento para entrenar, especialmente a medida que aumenta el número de características
+Puede ser más fácil de usar que neural redes, | Modelo difícil de interpretar de forma interna
+
+
+# 2. one-hot encoding  
+  
+**Implementar una función para realizar una transformación one-hot encoding de 
+las secuencias del fichero de datos *promoters.txt*. En caso de no lograr la 
+implementación de dicha transformación, se puede utilizar el fichero 
+promoters_onehot.txt con las secuencias codificados según una codificación 
+one-hot para completar la actividad.**
+
+Desarrollamos una función para hacer una transformación one-hot encoding para 
+una secuencia.
+  
+```{r chunck_2}
+# Función para convertir un nucleótido a one-hot encoding
+one_hot_encode_nucleotido <- function(nucleotido) {
+  # Convertimos siempre a mayúsculas
+  nucleotido.upper <- toupper(nucleotido)
+  switch(nucleotido.upper,
+         "A" = c(0, 0, 0, 1),
+         "C" = c(0, 0, 1, 0),
+         "G" = c(0, 1, 0, 0),
+         "T" = c(1, 0, 0, 0),
+         rep(0, 4)) # Devuelve un vector de ceros si el nucleótido se reconoce 
+}
+
+# Función para convertir toda una secuencia a one-hot encoding
+one_hot_encode_seq <- function(seq) {
+  # Separamos la secuencia
+  split.seq <- strsplit(seq, "")[[1]]
+  # Generamos la matriz one_hot con la secuencia
+  matrix.seq <- sapply(split.seq, one_hot_encode_nucleotido)
+  # Con todas las columnas de la matriz generamos un único vector one-hot
+  vector.unico <- c(matrix.seq)
+  # Devolvemos el vector con toda la secuencia one-hot
+  vector.unico
+}
+```
+
+
+# 3 Clasificador SVM
+  
+**Desarrollar un script en R que implemente un clasificador SVM.**
+
+## a) Lectura de datos
+**Leer los datos del fichero *promoters.txt*  **.
+
+Leemos los datos del fichero. 
+
+```{r chunck_3_a_1, echo = FALSE}
+# Cargamos el archivo promoters.txt en un DataFrame
+promoters_df <- read.table(data, header = FALSE, sep = ",")
+
+# Obtenemos el número de filas y columnas
+dimensiones <- dim(promoters_df)
+filas <- dimensiones[1]
+columnas <- dimensiones[2]
+```
+
+Nuestro fichero tiene `r filas` filas y `r columnas` columnas.
+
+Codificamos las secuencias que tenemos en nuestro fichero  con la función 
+one-hot desarrollada anteriormente.  
+
+```{r chunck_3_a_2}
+
+# Extraemos las dos primeras columnas "class" y "names"; las utilizaremos más adelante.
+class_names_columnas <- promoters_df[, 1:2]
+
+# Cogemos las secuencias de la 3a columna y las convertimos a one-hot
+one_hot_encoded_sequences <- lapply(promoters_df[[3]], one_hot_encode_seq)
+# Convertimos los resultados en una matriz de codificación one-hot
+one_hot_encoded_matrix <- do.call(rbind, one_hot_encoded_sequences)
+
+# Añadimos las columnas extraídas con la matriz de codificación one-hot
+promoters_one.hot_df <- cbind(class_names_columnas, one_hot_encoded_matrix)
+# Añadimos nombres a las dos primeras clumnas
+names(promoters_one.hot_df)[1:2] <- c("class", "names")
+# Convertimos la columna "class" en factor
+promoters_one.hot_df$class <- factor(promoters_one.hot_df$class)
+```
+
+
+## b) Separación de datos Training/Test
+  
+**Utilizando la semilla aleatoria 12345, separar los datos en dos partes, una 
+parte para training (67%) y una parte para test (33%).**
+
+Realizamos la separación de los datos de training (67%) y test (33%).  
+  
+```{r chunck_3_b_1}
+# Separamos la base de datos en dos grupos: el grupo data.train con el 67 % de 
+# las observaciones (params$p.train) y el grupo data.test con el resto
+
+# Fijamos la semilla para que los cálculos pseudo-aleatorios sean reproducibles
+set.seed(params$seed)
+
+# Obtenemos el número total de filas (datos) de parkinson
+n <- nrow(promoters_one.hot_df)
+# Calculamos el número de filas para entrenamiento y pruebas
+n_train <- round(params$p.train * n) # 67%
+n_test <- n - n_train # 33%
+# Obtenemos los índices de filas al azar para entrenamiento
+indices_train <- sample(1:n, n_train)
+# Seleccionamos las filas para entrenamiento
+data.train <- promoters_one.hot_df[indices_train,]
+# Eliminamos la segunda columna "names"
+data.train <- data.train[, -2]
+# Seleccionamos las filas restantes para pruebas
+data.test <- promoters_one.hot_df[-indices_train, ]
+# Eliminamos la segunda columna "names"
+data.test <- data.test[, -2]
+```
+  
+## c) Modelos SVM {.tabset .tabset-fade .tabset-pills}
+  
+**Utilizar el kernel lineal y el kernel RBF para crear sendos modelos SVM 
+basados en el training para predecir las clases en los datos del test.**
+
+### kernel lineal
+
+Relalizamos el modelo predictivo con el kernel lineal.
+  
+```{r chunck_3_c_1}
+require(kernlab)
+# Hacemos el clasificador de promotores con el modelo lineal ksvm. 
+mod_ksvm_lineal <- ksvm(class ~ ., data = data.train, kernel = "vanilladot")
+# Vemos la información del modelo
+mod_ksvm_lineal
+```
+
+Hacemos la predicción de los datos del test con el kernel lineal  
+
+```{r chunck_3_c_2}
+# Predicción del test con el kernel lineal
+pred_ksvm_lineal <- predict(mod_ksvm_lineal, data.test)
+
+# Métricas de rendimiento
+require(caret)
+# Matriz de confusión
+res <- table(pred_ksvm_lineal, data.test$class)
+conf.mat.ksvm.lineal <- confusionMatrix(res, positive="+")
+# Visualizamos
+conf.mat.ksvm.lineal
+```
+
+### kernel RBF
+
+Relalizamos el modelo predictivo con el kernel RBF
+
+```{r chunck_3_c_3}
+
+#require(kernlab)
+# Hacemos el clasificador de promotores con el modelo lineal ksvm.
+mod_ksvm_RBF <- ksvm(class ~ ., data = data.train, kernel = "rbfdot")
+# Vemos la información del modelo
+mod_ksvm_RBF
+```
+
+Hacemos la predicción de los datos del test con el kernel RBF  
+
+```{r chunck_3_c_4}
+# Predicción del test con el kernel RBF
+pred_ksvm_RBF <- predict(mod_ksvm_RBF, data.test)
+
+# Métricas de rendimiento
+# require(caret)
+# Matriz de confusión
+res <- table(pred_ksvm_RBF, data.test$class)
+conf.mat.ksvm.RBF <- confusionMatrix(res, positive="+")
+# Visualizamos
+conf.mat.ksvm.RBF
+```
+
+
+## d) SVM con caret {.tabset .tabset-fade .tabset-pills}
+
+**Usar el paquete caret con el modelo svmLinear para implementar un SVM con 
+kernel lineal y 3-fold crossvalidation.**
+
+Con la función `createDataPartition`  del paquete `caret` creamos la partición 
+de los datos de train( 67%) y test (33%).  
+Utilizaremos ambos sets, el que hemos creado nosotros anteriormente y este, para
+realizar los modelos con los dos sets con el fin de comparar los resultados.  
+
+```{r chunck_3_d_0}
+#library(caret)
+#Partición de datos
+set.seed(params$seed)
+# Seleccionamos el % con p.train de los parámetros (2/3)
+indices_train.caret <- createDataPartition(y=promoters_one.hot_df$class, 
+                                           p=params$p.train, list=FALSE)
+# Creamos los dos sets
+data.train.caret <- promoters_one.hot_df[indices_train.caret,]
+# Eliminamos la segunda columna "names"
+data.train.caret <- data.train.caret[, -2]
+# Seleccionamos las filas restantes para pruebas
+data.test.caret  <- promoters_one.hot_df[-indices_train.caret,]
+# Eliminamos la segunda columna "names"
+data.test.caret <- data.test.caret[, -2]
+
+# Para comprobar si la partición es válida. Debe dar sobre 2 en el caso de 2/3
+nrow(data.train.caret)/nrow(data.test.caret) 
+```
+
+
+### svmLinear
+
+Creamos el modelo SVM lineal con los datos de entrenamiento del paquete `caret`.
+
+```{r chunck_3_d_1}
+# Hacemos el clasificador de promotores con el modelo lineal ksvm del paquete "caret". 
+# Train sin repetición
+#tune_grid <- NULL
+tune_grid <- expand.grid(C = 1)
+mod_svmLinear.caret <- train(class ~ ., data.train.caret, method='svmLinear', 
+                       trControl= trainControl(method='none'), 
+                       tuneGrid = tune_grid, trace = FALSE)
+# Vemos la información del modelo
+mod_svmLinear.caret
+```
+
+Hacemos la predicción de los datos del test con el modelo SVM con 
+kernel lineal y los datos de test del paquete `caret`.
+
+```{r chunck_3_d_2}
+# Predicción del test con kernel lineal del paquete `caret`
+pred_svmLinear.caret <- predict(mod_svmLinear.caret, data.test.caret)
+
+# Métricas de rendimiento
+# require(caret)
+# Matriz de confusión
+res <- table(pred_svmLinear.caret, data.test.caret$class)
+conf.mat.svmLinear.caret <- confusionMatrix(res, positive="+")
+# Visualizamos
+conf.mat.svmLinear.caret
+```
+
+Ahora entrenamos el modelo utilizando los datos que hemos utilizado en la 
+función `ksvm`.  
+  
+```{r chunck_3_d_3}
+# Hacemos el clasificador de promotores con el modelo lineal ksvm del paquete "caret". 
+# Train sin repetición
+#tunegrid <- NULL
+tune_grid <- expand.grid(C = 1)
+mod_svmLinear <- train(class ~ ., data.train, method='svmLinear', 
+                       trControl= trainControl(method='none'), 
+                       tuneGrid = tune_grid, trace = FALSE)
+# Vemos la información del modelo
+mod_svmLinear
+```
+
+Hacemos la predicción de los datos del test con el modelo SVM con 
+kernel lineal del paquete `caret`.
+
+```{r chunck_3_d_4}
+# Predicción del test con kernel lineal del paquete `caret`
+pred_svmLinear <- predict(mod_svmLinear, data.test)
+
+# Métricas de rendimiento
+# require(caret)
+# Matriz de confusión
+res <- table(pred_svmLinear, data.test$class)
+conf.mat.svmLinear <- confusionMatrix(res, positive="+")
+# Visualizamos
+conf.mat.svmLinear
+```
+
+### 3-fold crossvalidation
+
+Creamos el modelo 3-fold crossvalidation con los datos de entrenamiento del 
+paquete `caret`.
+  
+```{r chunck_3_d_5}
+# Hacemos el clasificador de promotores con 3-fold crossvalidation del paquete "caret". 
+#tune_grid <- NULL
+tune_grid <- expand.grid(C = 1.5)
+mod_3fold_cross.caret <- train(class ~ ., data.train.caret, method='svmLinear', 
+                       trControl= trainControl(method='cv', number=3), 
+                       tuneGrid= tune_grid, trace = FALSE)
+# Vemos la información del modelo
+mod_3fold_cross.caret
+```
+
+Hacemos la predicción de los datos del test con el modelo SVM con 
+kernel lineal del paquete `caret`.
+
+```{r chunck_3_d_6}
+# Predicción del test con 3-fold crossvalidation
+pred_3fold_cross.caret <- predict(mod_3fold_cross.caret, data.test.caret)
+
+# Métricas de rendimiento
+# require(caret)
+# Matriz de confusión
+res <- table(pred_3fold_cross.caret, data.test.caret$class)
+conf.mat.3fold.cross.caret <- confusionMatrix(res, positive="+")
+# Visualizamos
+conf.mat.3fold.cross.caret
+```
+  
+Ahora entrenamos el modelo utilizando los datos que hemos utilizado en la 
+función `ksvm`.  
+
+```{r chunck_3_d_7}
+# Hacemos el clasificador de promotores con 3-fold crossvalidation del paquete "caret". 
+#tune_grid <- NULL
+tune_grid <- expand.grid(C = 1.5)
+mod_3fold_cross <- train(class ~ ., data.train, method='svmLinear', 
+                       trControl= trainControl(method='cv', number=3), 
+                       tuneGrid= tune_grid, trace = FALSE)
+# Vemos la información del modelo
+mod_3fold_cross
+```
+
+Hacemos la predicción de los datos del test con el modelo SVM con 
+kernel lineal del paquete `caret`.
+
+```{r chunck_3_d_8}
+# Predicción del test con 3-fold crossvalidation
+pred_3fold_cross <- predict(mod_3fold_cross, data.test)
+
+# Métricas de rendimiento
+# require(caret)
+# Matriz de confusión
+res <- table(pred_3fold_cross, data.test$class)
+conf.mat.3fold.cross <- confusionMatrix(res, positive="+")
+# Visualizamos
+conf.mat.3fold.cross
+```
+
+### Resultados
+  
+Los modelos entrenados con los datos que hemos separado para `ksvm` dan 
+exáctamente los mismos resultados. Lo apropiado es escoger el modelo más simple.
+  
+Al utilizar los datos separados con la función `createDataPartition`, también 
+observamos que tanto el modelo *SVM lineal* como *3-fold crossvalidation* nos 
+dan los mismos resultados. Estos modelos dan mejores resultados (accuracy, kappa) 
+que los anteriores.  
+
+## e)  Evaluación kernel RBF
+
+**Evaluar el rendimiento del algoritmo SVM con kernel RBF para diferentes 
+valores de los hiperparámetros C y sigma. Orientativamente, se propone explorar 
+valores de sigma en el intervalo (0.005,0.5) y valores de C en el intervalo 
+(0.1, 2). Una manera fácil de hacerlo es utilizar el paquete caret con el modelo
+svmRadial. Mostrar un gráfico del rendimiento según los valores de los 
+hiperparámetros explorados. Comentar los resultados.**
+
+```{r chunck_3_e_1}
+# Configuramos el control de entrenamiento para la validación cruzada
+train_control <- trainControl(method = "cv", number = 5, repeats = 0)
+
+# Definimos los hiperparámetros C y sigma en los intervalos planteados.
+grid <- expand.grid(sigma = seq(0.005, 0.5, length = 5),
+                    C = seq(0.1, 2, length = 5))
+
+# Entrenamos los modelos SVM con kernel RBF con el paquete caret
+svm_model <- train(class ~ ., data = data.train, method = "svmRadial",
+                   trControl= train_control, tuneGrid = grid)
+
+# Obtenemos los resultados del conjunto de modelos
+resultados <- svm_model$results
+
+# Ordenamos los resultados por 'Accuracy'
+resultados_ordenados <- resultados[order(-resultados$Accuracy),]
+
+# Creamos una tabla resumen
+tabla_resumen <- resultados_ordenados[, c("sigma", "C", "Accuracy", "Kappa")]
+tabla_resumen
+
+# Mostramos un gráfico del rendimiento según los valores
+# Cargamos la librería ggplot2
+require(ggplot2)
+
+# 2. Creamos el histograma con ggplot2
+pl <- ggplot(data = svm_model)
+pl2 <- pl + labs(title = "Rendimiento SVM con kernel RBF según hiperparámetros",
+       x = "Sigma", y = "Accuracy")
+pl2
+```
+  
+  
+
+Se puede observar que todos los modelos tienen su mayor rendimiento con sigma = 0.
+En cuanto al parámetro C obtenemos la misma accuracy en el intervalo entre 1 a 2.  
+Teniendo esto en mente, escogeríamos el modelo con sigma = 0 y C = 1.
+  
+## f)  Tabla resumen
+
+**Crear una tabla resumen de los diferentes modelos y sus rendimientos. Comentar
+y comparar los resultados de la clasificación en función de los valores 
+generales de la clasificación como accuracy y otros para los diferentes 
+clasificadores obtenidos. ¿Qué modelo resulta ser el mejor?**
+
+Modelo|Accuraccy|kappa
+:----|:----|:----:
+ksvm.lineal|`r conf.mat.ksvm.lineal$overall["Accuracy"]`|`r conf.mat.ksvm.lineal$overall["Kappa"]`
+ksvm.RBF|`r conf.mat.ksvm.RBF$overall["Accuracy"]`|`r conf.mat.ksvm.RBF$overall["Kappa"]`
+ksvm.RBF|`r conf.mat.ksvm.RBF$overall["Accuracy"]`|`r conf.mat.ksvm.RBF$overall["Kappa"]`
+svmLiear|`r conf.mat.svmLinear$overall["Accuracy"]`|`r conf.mat.svmLinear$overall["Kappa"]`
+3-fold CV|`r conf.mat.3fold.cross$overall["Accuracy"]`|`r conf.mat.3fold.cross$overall["Kappa"]`
+svmLiear(caret)|`r conf.mat.svmLinear.caret$overall["Accuracy"]`|`r conf.mat.svmLinear.caret$overall["Kappa"]`
+3-fold CV(caret)|`r conf.mat.3fold.cross.caret$overall["Accuracy"]`|`r conf.mat.3fold.cross.caret$overall["Kappa"]`
+  
+  
+Viendo la tabla podemos comprobar que todos los modelos entrenados con los datos
+que hemos separado para `ksvm` dan exáctamente los mismos resultados. En este 
+caso escogeríamos el modelo más simple, ksvm lineal.  
+Al utilizar los datos separados con el paquete `caret`, tanto el modelo 
+*SVM lineal* como *3-fold crossvalidation* nos dan los mismos resultados, eso 
+sí, mejorando los anteriores. En este caso también escogerímos el modelo más 
+sencillo, el *SVM lineal*.
+
+
+
+# Referencias  

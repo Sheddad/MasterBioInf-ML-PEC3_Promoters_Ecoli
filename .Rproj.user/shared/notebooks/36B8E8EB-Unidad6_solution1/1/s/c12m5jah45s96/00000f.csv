@@ -1,0 +1,5 @@
+"0","m.file <- ifelse(params$folder.data=="""", "
+"0","                 params$file1,"
+"0","                 file.path(params$folder.data,params$file1))"
+"0","dataset <- read.csv(file=m.file) "
+"0","#length(complete.cases(dataset))"

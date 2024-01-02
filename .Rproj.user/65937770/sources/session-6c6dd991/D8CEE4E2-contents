@@ -1,0 +1,136 @@
+# Función para convertir un nucleótido a one-hot encoding
+one_hot_encode_nucleotido <- function(nucleotido) {
+  # Convertimos siempre a mayúsculas
+  nucleotido.upper <- toupper(nucleotido)
+  switch(nucleotido.upper,
+         "A" = c(0, 0, 0, 1),
+         "C" = c(0, 0, 1, 0),
+         "G" = c(0, 1, 0, 0),
+         "T" = c(1, 0, 0, 0),
+         rep(0, 4)) # Devuelve un vector de ceros si el nucleótido se reconoce 
+}
+
+# Función para convertir toda una secuencia a one-hot encoding
+one_hot_encode_seq <- function(seq) {
+  # Separamos la secuencia
+  split.seq <- strsplit(seq, "")[[1]]
+  # Generamos la matriz one_hot con la secuencia
+  matrix.seq <- sapply(split.seq, one_hot_encode_nucleotido)
+  # Con todas las columnas de la matriz generamos un único vector one-hot
+  vector.unico <- c(matrix.seq)
+  # Devolvemos el vector con toda la secuencia one-hot
+  vector.unico
+}
+
+seq = "ATCGGGGTAA"
+one_hot_encode_seq(seq)
+
+data_onehot <- "promoters_onehot"
+
+# Cargamos el archivo promoters.txt en un DataFrame
+promoters_df <- read.table(data, header = FALSE, sep = ",")
+# Extraer las dos primeras columnas
+class_names_columnas <- promoters_df[, 1:2]
+
+# Obtenemos el número de filas y columnas
+dimensiones <- dim(promoters_df)
+filas <- dimensiones[1]
+columnas <- dimensiones[2]
+
+# Cogemos las secuencias de la 3a columna y las convertimos a one-hot
+one_hot_encoded_sequences <- lapply(promoters_df[[3]], one_hot_encode_seq)
+# Convertimos los resultados en una matriz de codificación one-hot
+one_hot_encoded_matrix <- do.call(rbind, one_hot_encoded_sequences)
+
+# Añadimos las columnas extraídas con la matriz de codificación one-hot
+promoters_one.hot_df <- cbind(class_names_columnas, one_hot_encoded_matrix)
+# Añadimos nombres a las dos primeras clumnas
+names(promoters_one.hot_df)[1:2] <- c("class", "names")
+
+
+# Vemos la estructura del df
+str(promoters_one.hot_df)
+# Convertimos la columna "class" en factor
+promoters_one.hot_df$class <- factor(promoters_one.hot_df$class)
+
+
+# Cargamos el archivo promoters.txt en un DataFrame
+data_onehot <- "promoters_onehot.txt"
+onehot_df <- read.table(data_onehot, header = TRUE, sep = "")
+
+dataset <- read.csv("colon2.csv") 
+# Vemos la estructura del df
+str(dataset$y)
+
+
+
+
+# Instalar y cargar el paquete caret
+# install.packages("caret")
+library(caret)
+
+# Asegurarse de que los datos están listos (data.train, data.test)
+
+# Configurar el control de entrenamiento para la validación cruzada
+train_control <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+
+# Definir la grilla de hiperparámetros
+grid <- expand.grid(sigma = seq(0.005, 0.5, length = 10),
+                    C = seq(0.1, 2, length = 10))
+
+# Entrenar el modelo SVM con kernel RBF
+svm_model <- train(class ~ ., data = data.train, method = "svmRadial",
+                   trControl = train_control, tuneGrid = grid)
+
+# Graficar los resultados
+plot(svm_model)
+
+
+# Configurar el control de entrenamiento para la validación cruzada
+train_control <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+train_control <- trainControl(method = "cv", number = 5, repeats = 0)
+
+# Definir la grilla de hiperparámetros
+grid <- expand.grid(sigma = seq(0.005, 0.5, length = 5),
+                    C = seq(0.1, 2, length = 5))
+
+# Entrenar el modelo SVM con kernel RBF
+svm_model <- train(class ~ ., data = data.train, method = "svmRadial",
+                   tuneGrid = grid)
+
+# Graficar los resultados
+plot(svm_model)
+
+# Suponiendo que svm_model es el modelo entrenado con caret
+resultados <- svm_model$results
+
+resultados
+
+# Ordenar los resultados por alguna métrica, por ejemplo, Accuracy
+resultados_ordenados <- resultados[order(-resultados$Accuracy),]
+
+# Crear una tabla resumen
+tabla_resumen <- resultados_ordenados[, c("sigma", "C", "Accuracy", "Kappa")]
+
+# ksvm.lineal
+conf.mat.ksvm.lineal$overall["Accuracy"]
+conf.mat.ksvm.lineal$overall["Kappa"]
+
+# ksvm.RBF
+conf.mat.ksvm.RBF$overall["Accuracy"]
+conf.mat.ksvm.RBF$overall["Kappa"]
+
+# Caret svmLiear
+conf.mat.svmLinear$overall["Accuracy"]
+conf.mat.svmLinear$overall["Kappa"]
+
+# Caret 3-fold crossvalidation
+conf.mat.3fold.cross$overall["Accuracy"]
+conf.mat.3fold.cross$overall["Kappa"]
+
+
+mod_svmLinear$results
+
+
+
+

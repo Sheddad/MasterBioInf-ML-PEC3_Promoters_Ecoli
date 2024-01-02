@@ -1,0 +1,6 @@
+"0","set.seed(params$seed.clsfier)"
+"0","modeloGauss <- ksvm(y~.,data=dataset.train, "
+"0","                     kernel='rbfdot')"
+"2","Error in .local(x, ...) : 
+  No Support Vectors found. You may want to change your parameters
+"

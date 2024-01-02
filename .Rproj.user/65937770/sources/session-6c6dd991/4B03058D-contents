@@ -1,0 +1,718 @@
+---
+title: "PEC 3 Machine Learning"
+author: "Sheddad Kaid-Salah Ferrón"
+date: "`r format(Sys.Date())`"
+params:
+  date: !r Sys.Date()
+  printcode:
+    label: "Display Code:"
+    value: TRUE # or set it to FALSE
+  data:
+    label: "Input dataset:"
+    value: promoters.txt
+    input: file
+output:
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r class.source = 'fold-hide', setup, include=FALSE}
+# Parametrizamos
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=params$printcode,
+	             cache=FALSE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+Sys.setlocale("LC_TIME", "C")
+```
+
+``` {r paquetes, include=FALSE}
+# Instalamos paquetes, si no lo están, en caso de ser requeridos
+#if(!(require(ggplot2))) install.packages("ggplot2")
+#if(!(require(class))) install.packages("class")
+#if(!(require(gmodels))) install.packages("gmodels")
+#if(!(require(caret))) install.packages("caret")
+#if(!(require(ROCR))) install.packages("ROCR")
+#if(!(require(bibtex))) install.packages("bibtex")
+```
+
+
+```{r ficheros, include=FALSE}
+# Fichero human_data.txt con los datos de las secuencias con la clase de proteínas 
+# Lo hacemos parametrizado
+data <- params$data
+```
+
+-----------------------------------------------------------
+
+# 1. 
+
+**Escribir en el informe una sección con el título “Algoritmo Support Vector 
+Machine” en el que se haga una breve explicación de su funcionamiento y sus 
+características y además, se presente una tabla de sus fortaleza y debilidades.**
+
+## Algoritmo Support Vector Machine (SVM)
+
+El algoritmo k-NN recibe su nombre debido a que utiliza información sobre los 
+k-vecinos más cercanos de un conjunto de datos de prueba para clasificar los 
+datos sin etiquetar. Los vecinos se determinan en función de alguna medida de 
+distancia como puede ser la euclídea, la de manhattan o minkowski.
+
+En el caso de la distancia euclídea se calcula así:
+$$  
+dist(p,q) = \sqrt{(p_1-q_1)^{2}+(p_2-q_2)^{2}+...+(p_n-q_n)^{2}}
+$$
+  
+La letra k es un término que hace referencia a la distancia elegida de los 
+vecinos más cercanos. Una vez definida k, el algoritmo requiere un conjunto de 
+datos de entrenamiento que se han clasificado en distintas categorías. Por cada 
+registro sin etiquetar del conjunto de datos de prueba, k-NN identifica 
+k registros en los datos de entrenamiento que son los "más cercanos".
+Por último, asigna a un dato sin etiquetar la clase de la mayoría de los 
+k vecinos más cercanos.
+Comentar que la elección de k afecta a las predicciones y determina como de bien
+el modelo generalizará los datos sin etiquetar. Un valor de pequeño de 
+k puede generar ruido (**overfitting**) mientras que un valor grande puede suavizar 
+demasiado las predicciones (**underfitting**).
+
+
+## Tabla de fortalezas y debilidades de k-NN
+
+Fortalezas|Debilidades
+:----|:----|
+Simple y efectivo|No produce un modelo
+No se asume nada sobre los datos|Hay que seleccionar una k adecuada
+Rápida fase de entrenamiento|Fase de clasificación lenta
+- |Características nominales y datos faltantes. Requieren procesamiento adicional
+
+
+# 2. 
+**Implementar una función para realizar una transformación one-hot encoding de 
+las secuencias del fichero de datos *promoters.txt*. En caso de no lograr la 
+implementación de dicha transformación, se puede utilizar el fichero 
+promoters_onehot.txt con las secuencias codificados según una codificación 
+one-hot para completar la actividad.**
+
+Desarrollamos una función .
+  
+```{r chunck_2}
+# Función para contar K-meros en una lista
+contar_k_meros <- function(secuencia, k = 6) {
+  # En nuestro caso por defecto serán hexámeros
+  # Creamos una lista para almacenar los k_meros y sus conteos
+  cuenta_k_meros <- list()
+
+  for (i in 1:(nchar(secuencia) - (k - 1))) {
+    k_mero <- substr(secuencia, i, i + (k - 1))
+    if (!grepl("N", k_mero)) # Si no contiene "N"
+    {
+      if (k_mero %in% names(cuenta_k_meros)) {
+        cuenta_k_meros[[k_mero]] <- cuenta_k_meros[[k_mero]] + 1
+      } else {
+        cuenta_k_meros[[k_mero]] <- 1
+      }
+    }
+  }
+  
+  # Convertimos la lista a un DataFrame
+  result_df <- data.frame(K_mero = names(cuenta_k_meros), Cantidad = unlist(cuenta_k_meros))
+  
+  return(result_df)
+}
+```
+
+
+# 3 
+**Desarrollar un script en R que implemente un clasificador k-nn. El script 
+realiza los siguientes apartados:**
+
+## a) 
+**Leer los datos del fichero *human_data.txt*  **.
+
+```{r chunck_3_a_1, echo = FALSE}
+# Cargamos el archivo human_data.txt en un DataFrame
+#human_data <- read.table("human_data_prueba.txt", header = TRUE, sep = " ")
+human_data <- read.table(data, header = TRUE, sep = " ")
+
+# Obtenemos el número de filas y columnas
+dimensiones <- dim(human_data)
+filas <- dimensiones[1]
+columnas <- dimensiones[2]
+```
+
+Nuestro fichero tiene `r filas` filas y `r columnas` columnas.
+
+La idea aquí es leer el fichero y mostrar algunos datos
+
+```{r chunck_3_a_2}
+# Vemos la estructura de los datos
+str(human_data)
+```
+
+
+## b) 
+**Representar mediante un histograma la distribución de las frecuencias de 
+longitudes de las secuencias.**
+
+
+```{r chunck_3_b_1}
+# 1. Calculamos las longitudes de las secuencias
+longitud_secuencias <- nchar(human_data$sequence)
+
+# Cargar la librería ggplot2
+library(ggplot2)
+
+# 2. Creamos el histograma con ggplot2
+pl <- ggplot(data = data.frame(Length = longitud_secuencias), aes(x = Length))
+pl2 <- pl + geom_histogram(col='black', aes(fill = ..count..)) +
+  labs(title = "Distribución de Longitudes de Secuencias",
+       x = "Longitud de Secuencia", y = "Frecuencia") + theme_minimal()
+pl2
+```
+
+## c)
+**Transformar las secuencias de los genes en vectores numéricos usando la 
+función de conteo de hexámeros desarrollada anteriormente. Obtener la matriz de 
+conteos de hexámeros. **
+
+Generamos todos los hexámeros. Variaciones de 4 elementos (A, C, G, T) cogidos 
+de 6 en 6 con repetición:
+$$  
+V_{4,6} = n^m = 4^{6} = 4096
+$$ 
+
+```{r chunck_3_c_1}
+# Creamos una función recursiva (evitamos bucles anidados) para generar todas 
+# las secuencias de los K-meros deseados. En ete caso hexámeros (K=6)
+generar_k_meros <- function(prefix = "", length = 6) {
+  # Bases de nucleótidos
+  bases <- c("A", "C", "G", "T")
+  # Si la longitud es cero devolvemos la cadena prefix
+  if (length == 0) {
+    return(prefix)
+  }
+  # Inicializamos el vector k_meros vacío
+  k_meros <- character(0)
+  # Iniciamos la iteración con recursividad. Vamos concatenando prefix con la base
+  for (base in bases) {
+    k_meros <- c(k_meros, generar_k_meros(paste0(prefix, base), length - 1))
+  }
+  # Devolvemos el vector de K-meros
+  return(k_meros)
+}
+
+# Llamar a la función para generar los hexámeros (K-meros de 6)
+k_meros <- generar_k_meros()
+```
+
+
+Para obtener la matriz de conteo primero generamos una matriz de ceros con 
+columnas la cantidad de hexámeros generados y filas el número de secuencias en 
+el archivo de *human_data.txt*. 
+
+```{r chunck_3_c_2}
+# Generamos una matriz de ceros con columnas la cantidad de k-meros generados y 
+# filas el número de secuencias en el archivo de datos.
+matriz_conteo <- matrix(0, nrow = nrow(human_data), ncol = length(k_meros))
+
+# Asignamos los nombres de columna con los K-meros (hexámeros)
+colnames(matriz_conteo) <- k_meros
+
+# Crear el DataFrame
+conteo_k_meros_df <- data.frame(matriz_conteo)
+```
+
+Finalmente utilizamos la función *contar_k_meros* del apartado 2 para obtener la 
+matriz de conteo de hexámeros.
+
+```{r chunck_3_c_3}
+# Comprobar si el archivo existe
+archivo <- "conteo_k_meros.RData"
+# En caso de que exista no volvemos a calcular la matriz de conteo
+if (file.exists(archivo)) {
+  # Cargamos el archivo
+  load(archivo)
+  # Informamos de que el archivo existe
+  cat("El archivo", archivo, "existe en el directorio actual.\n")
+} else {
+  # Iteramos a través de las filas de human_data
+  for (i in 1:nrow(human_data)) {
+    secuencia <- human_data[i, "sequence"]
+    
+    # Aplicar la función contar_k_meros a la secuencia actual
+    #resultado_kmeros <- contar_k_meros(secuencia)
+    resultado_kmeros <- contar_k_meros(secuencia)
+    
+    # Actualizar conteo_k_meros_df con los resultados
+    for (j in 1:nrow(resultado_kmeros)) {
+      kmero <- resultado_kmeros$K_mero[j]
+      cantidad <- resultado_kmeros$Cantidad[j]
+      
+      # Actualizar el valor correspondiente en conteo_k_meros_df
+      conteo_k_meros_df[i, kmero] <- cantidad
+    }
+  }
+  # Guardamos los datos en el archivo "conteo_k_meros.RData"
+  save(conteo_k_meros_df, file = archivo)
+  # Informamos de que el archivo no existía
+  cat("El archivo", archivo, "no existe en el directorio actual.\n")
+}
+
+# Añadimos la columna tipo de proteína (class) al conjunto de datos creados
+# Utilizamos cbind para agregar la nueva columna al principio
+conteo_k_meros_df <- cbind(human_data$class, conteo_k_meros_df)
+# Renombramos la nueva columna como class
+colnames(conteo_k_meros_df)[colnames(conteo_k_meros_df) == 
+                              "human_data$class"] <- "class"
+```
+
+## d)
+
+### i.
+**Utilizando la semilla aleatoria 123, separar los datos en dos partes, una 
+parte para training (75%) y una parte para test (25%).**
+
+```{r chunck_4_d_1}
+# Separamos la base de datos en dos grupos: el grupo data.train con el 75 % de 
+# las observaciones y el grupo data.test con el resto
+
+# Fijamos la semilla para que los cálculos pseudo-aleatorios sean reproducibles
+set.seed(123)
+
+# Obtenemos el número total de filas (datos) de parkinson
+n <- nrow(conteo_k_meros_df)
+# Calculamos el número de filas para entrenamiento y pruebas
+n_train <- round(0.75 * n) # 75%
+n_test <- n - n_train # 25%
+# Obtenemos los índices de filas al azar para entrenamiento
+indices_train <- sample(1:n, n_train)
+# Seleccionamos las filas para entrenamiento
+data.train <- conteo_k_meros_df[indices_train, ]
+# Seleccionamos las filas restantes para pruebas
+data.test <- conteo_k_meros_df[-indices_train, ]
+```
+
+### ii. {.tabset .tabset-fade .tabset-pills}
+
+**Aplicar el k-nn (k = 1, 3, 5, 7) basado en el training para predecir la 
+familia de las secuencias del test.**
+
+La idea es utilizar la función *knn()* para el algoritmo k-nn y luego utilizar 
+la función *confusionMatrix()* del paquete *caret* para obtener la **Matríz de 
+Confusión** y las estadísticas.
+
+```{r chunck_4_d_2}
+# Nos guardamos la variable "class" (columna 1) en vectores para entrenar el 
+# modelo k-NN 
+train_labels <- conteo_k_meros_df[indices_train, 1]
+test_labels <- conteo_k_meros_df[-indices_train, 1]
+
+# # Definimos niveles (etiquetas) para los enteros
+familias <- c("0", "1", "2", "3", "4", "5", "6")
+
+# Convertimos el vector de enteros en un factor
+test_labels_factor <- factor(test_labels, levels = familias)
+```
+
+#### k = 1
+
+```{r chunck_4_d_3}
+# Utilizamos la función knn del paquete "class"
+require("class")
+# Modelo knn para la predicción de la familia de proteínas en función de las secuencias
+# Utilizamos una k = 1
+prot_fam_test_pred_1 <- knn(train = data.train, test = data.test,
+                      cl = train_labels, k = 1, prob = TRUE)
+
+# Creamos un data frame con los resultados predichos y actuales
+resultados_1_df <- data.frame(predichos = prot_fam_test_pred_1, actuales = 
+                                test_labels_factor)
+
+# Evaluamos el modelo
+library(caret)
+# Utilizamos la función confusionMatrix del paquete caret
+confusion_matrix_1 <- confusionMatrix(resultados_1_df$predichos, resultados_1_df$actuales)
+confusion_matrix_1
+
+# Obtenemos la precisión (accuracy)
+accuracy_1 <- confusion_matrix_1$overall["Accuracy"]
+# Obtenemos el valor del coeficiente kappa
+kappa_1 <- confusion_matrix_1$overall["Kappa"]
+```
+
+#### k = 3
+
+```{r chunck_4_d_4}
+# Utilizamos la función knn del paquete "class"
+require("class")
+# Modelo knn para la predicción de la familia de proteínas en función de las secuencias
+# Utilizamos una k = 3
+prot_fam_test_pred_3 <- knn(train = data.train, test = data.test,
+                      cl = train_labels, k = 3, prob = TRUE)
+
+# Creamos un data frame con los resultados predichos y actuales
+resultados_3_df <- data.frame(predichos = prot_fam_test_pred_3, actuales = 
+                                test_labels_factor)
+
+# Evaluamos el modelo
+library(caret)
+# Utilizamos la función confusionMatrix del paquete caret
+confusion_matrix_3 <- confusionMatrix(resultados_3_df$predichos, resultados_3_df$actuales)
+confusion_matrix_3
+
+# Obtenemos la precisión (accuracy)
+accuracy_3 <- confusion_matrix_3$overall["Accuracy"]
+# Obtenemos el valor del coeficiente kappa
+kappa_3 <- confusion_matrix_3$overall["Kappa"]
+```
+
+#### k = 5
+
+```{r chunck_4_d_5}
+# Utilizamos la función knn del paquete "class"
+require("class")
+# Modelo knn para la predicción de la familia de proteínas en función de las secuencias
+# Utilizamos una k = 5
+prot_fam_test_pred_5 <- knn(train = data.train, test = data.test,
+                      cl = train_labels, k = 5, prob = TRUE)
+
+# Creamos un data frame con los resultados predichos y actuales
+resultados_5_df <- data.frame(predichos = prot_fam_test_pred_5, actuales = 
+                                test_labels_factor)
+
+# Evaluamos el modelo
+library(caret)
+# Utilizamos la función confusionMatrix del paquete caret
+confusion_matrix_5 <- confusionMatrix(resultados_5_df$predichos, resultados_5_df$actuales)
+confusion_matrix_5
+
+# Obtenemos la precisión (accuracy)
+accuracy_5 <- confusion_matrix_5$overall["Accuracy"]
+# Obtenemos el valor del coeficiente kappa
+kappa_5 <- confusion_matrix_5$overall["Kappa"]
+```
+
+#### k = 7
+
+```{r chunck_4_d_6}
+# Utilizamos la función knn del paquete "class"
+require("class")
+# Modelo knn para la predicción de la familia de proteínas en función de las secuencias
+# Utilizamos una k = 7
+prot_fam_test_pred_7 <- knn(train = data.train, test = data.test,
+                      cl = train_labels, k = 7, prob = TRUE)
+
+# Creamos un data frame con los resultados predichos y actuales
+resultados_7_df <- data.frame(predichos = prot_fam_test_pred_7, actuales = 
+                                test_labels_factor)
+
+# Evaluamos el modelo
+library(caret)
+# Utilizamos la función confusionMatrix del paquete caret
+confusion_matrix_7 <- confusionMatrix(resultados_7_df$predichos, resultados_7_df$actuales)
+confusion_matrix_7
+
+# Obtenemos la precisión (accuracy)
+accuracy_7 <- confusion_matrix_7$overall["Accuracy"]
+# Obtenemos el valor del coeficiente kappa
+kappa_7 <- confusion_matrix_7$overall["Kappa"]
+```
+
+
+### iii. 
+**Comentar los resultados.**
+
+Si nos fijamos en la información que nos da la función ConfusionMatrix() vemos 
+que la k que da mejores resultados es la k=1. En este caso la «accuracy», que es
+la probabilidad de que el modelo prediga correctamente un verdadero positivo o 
+un verdadero negativo, es de `r accuracy_1` mientras que en las otras k es de 
+`r accuracy_3`, `r accuracy_5` y `r accuracy_7`.
+Si nos fijamos en el estadístico *Kappa*, que ajusta la «accuracy» teniendo en 
+cuenta una correcta predicción por azar, vemos que también con k = 1 obtenemos 
+el mejor resultado, `r round(kappa_1, digits = 3)` que se considera 
+«Good agreement» mientras que con las otras tres k’s tan solo obtenemos un 
+«Moderate agreement».
+
+## (e) 
+**Para las secuencias de las familias: 0 (=G protein coupled receptors) y 
+1( =Tyrosine kinase)**
+
+
+### i.{.tabset .tabset-fade .tabset-pills} 
+
+
+**Representar la curva ROC para cada valor de k = 1, 3, 5, 7.**
+
+Para representar las curvas ROC he utilizado la función prediction() del paquete
+ROCR. Esta función no acepta multinivel (tenemos 6 familias) por lo que he hecho
+binarios los valores reales de los datos del test, en donde 1 es la familia de 
+interés y el 0 para el resto, las otras 5 familias.
+Como probabilidades utilizo las calculadas por los diferentes modelos knn.
+
+```{r chunck_4_e_0}
+
+# Valor de la familia que deseamos seleccionar
+familia_G <- 0
+familia_T <- 1
+
+# Creamos un nuevo vector de test_labels binarios de la familia G (0)
+test_labels_binarios_G <- ifelse(test_labels == familia_G, 1, 0)
+
+# Creamos un nuevo vector de test_labels binarios de la familia T (1)
+test_labels_binarios_T <- ifelse(test_labels == familia_T, 1, 0)
+
+# Las probabilidades de predicción se encuentran en cada modelo_knn
+probabilidades_prediccion_1 <- attr(prot_fam_test_pred_1, "prob")
+probabilidades_prediccion_3 <- attr(prot_fam_test_pred_3, "prob")
+probabilidades_prediccion_5 <- attr(prot_fam_test_pred_5, "prob")
+probabilidades_prediccion_7 <- attr(prot_fam_test_pred_7, "prob")
+```
+
+#### Familia G
+
+
+```{r chunck_4_e_1}
+
+require(ROCR)
+
+# k = 1
+pred_1_G <- prediction(predictions = probabilidades_prediccion_1,
+                   labels = test_labels_binarios_G)
+perf_1_G <- performance(pred_1_G, measure = "tpr", x.measure = "fpr")
+# k = 3
+pred_3_G <- prediction(predictions = probabilidades_prediccion_3,
+                   labels = test_labels_binarios_G)
+perf_3_G <- performance(pred_3_G, measure = "tpr", x.measure = "fpr")
+# k = 5
+pred_5_G <- prediction(predictions = probabilidades_prediccion_5,
+                   labels = test_labels_binarios_G)
+perf_5_G <- performance(pred_5_G, measure = "tpr", x.measure = "fpr")
+# k = 7
+pred_7_G <- prediction(predictions = probabilidades_prediccion_7,
+                   labels = test_labels_binarios_G)
+perf_7_G <- performance(pred_7_G, measure = "tpr", x.measure = "fpr")
+
+# Dibujamos las curvas ROC
+par(mfrow = c(2, 2))
+plot(perf_1_G, main = "ROC para la familia G con k = 1",
+     col = "blue", lwd = 3)
+plot(perf_3_G, main = "ROC para la familia G con k = 3",
+     col = "blue", lwd = 3)
+plot(perf_5_G, main = "ROC para la familia G con k = 5",
+     col = "blue", lwd = 3)
+plot(perf_7_G, main = "ROC para la familia G con k = 7",
+     col = "blue", lwd = 3)
+```
+
+#### Familia T
+
+
+```{r chunck_4_e_2}
+require(ROCR)
+
+# k = 1
+pred_1_T <- prediction(predictions = probabilidades_prediccion_1,
+                   labels = test_labels_binarios_T)
+perf_1_T <- performance(pred_1_T, measure = "tpr", x.measure = "fpr")
+# k = 3
+pred_3_T <- prediction(predictions = probabilidades_prediccion_3,
+                   labels = test_labels_binarios_T)
+perf_3_T <- performance(pred_3_T, measure = "tpr", x.measure = "fpr")
+# k = 5
+pred_5_T <- prediction(predictions = probabilidades_prediccion_5,
+                   labels = test_labels_binarios_T)
+perf_5_T <- performance(pred_5_T, measure = "tpr", x.measure = "fpr")
+# k = 7
+pred_7_T <- prediction(predictions = probabilidades_prediccion_7,
+                   labels = test_labels_binarios_T)
+perf_7_T <- performance(pred_7_T, measure = "tpr", x.measure = "fpr")
+
+# Dibujamos las curvas ROC
+par(mfrow = c(2, 2))
+plot(perf_1_T, main = "ROC para la familia T con k = 1",
+     col = "blue", lwd = 3)
+plot(perf_3_T, main = "ROC para la familia T con k = 3",
+     col = "blue", lwd = 3)
+plot(perf_5_T, main = "ROC para la familia T con k = 5",
+     col = "blue", lwd = 3)
+plot(perf_7_T, main = "ROC para la familia T con k = 7",
+     col = "blue", lwd = 3)
+```
+
+### ii.{.tabset .tabset-fade .tabset-pills} 
+
+**Comentar los resultados de la clasificación en función de la curva ROC y del 
+número de falsos positivos, falsos negativos y error de clasificación obtenidos 
+para los diferentes valores de k.**
+
+Creamos la función *evaluacionModelo()* para poder evaluar los modelos: 
+
+```{r chunck_4_e_3}
+# Función para obtener la evaluación de un Modelo utilizando la matriz generada
+# por la función CorossTable()
+evaluacionModelo <- function(matriz, positivo = 1) {
+  
+  # Suma de todos los elementos de la matriz
+  N <- sum(matriz)
+  
+  # True Positive. Primer elemento de la diagonal 
+  TP <- matriz[positivo, positivo]
+  
+  # True Negative. La suma de todos los elementos de la matriz sin la primera fila
+  # y la primera columna
+  TN <- sum(matriz[-positivo, -positivo])
+  
+  # False Negative. Suma de la primera fila menos el primer elemento (que es el TP).
+  FN <- sum(matriz[positivo, ]) - matriz[positivo, positivo]
+  
+  # False Positive. Suma de la primera columna menos el primer elemento (que es el TP).
+  FP <- sum(matriz[, positivo]) - matriz[positivo, positivo]
+  
+  # Hacemos la matriz de confusión
+  matriz_confusion <- matrix(c(TP, FP, FN, TN), nrow = 2, ncol = 2, 
+                             dimnames = list(c("Actual +", "Actual -"), 
+                                             c("Predicho +", "Predicho -")))
+  # Accuracy
+  accuracy <- (TP + TN)/N
+  # Tasa de error
+  error_rate <- 1 - accuracy
+  # Kappa
+  pr_a <- TP/N + TN/N # Accuracy
+  pr_e <- (TN + FP)/N * (TN + FN)/N + (TP + FP)/N * (TP + FN)/N 
+  kappa <- (pr_a - pr_e) / (1 - pr_e)
+  # Sensibilidad*
+  sensitivity <- TP / (TP + FN)
+  # Especificidad*
+  specificity <- TN / (TN + FP)
+  # precisión*
+  precision <- TP / (TP + FP)
+  # recall = sensitivity
+  recall <- TP / (TP + FN)
+  # F-mesure
+  F <- 2*TP / (2*TP + FP + FN)
+  
+  return(list(matriz_confusion = matriz_confusion, TP = TP, TN = TN, FP = FP, 
+              FN = FN, accuracy=accuracy, error_rate=error_rate, kappa= kappa,
+              sensitivity=sensitivity, precision=precision, recall= recall, F=F ))
+}
+```
+
+Evaluamos los distintos modelos con la función CrossTable() del paquete gmodels:
+
+```{r chunck_4_e_4, include = FALSE}
+# Utilizamos la función CrossTable del paquete gmodels
+require(gmodels)
+# Evaluamos el modelo con k = 1
+CT_1 <- CrossTable(x = test_labels, y = prot_fam_test_pred_1,
+           prop.chisq=FALSE, prop.c = FALSE, prop.r = FALSE)
+# Convertimos la tabla en una matriz
+ct_matriz_1 <- as.matrix(CT_1$t)
+# Evaluamos el modelo con k = 3
+CT_3 <- CrossTable(x = test_labels, y = prot_fam_test_pred_3,
+           prop.chisq=FALSE, prop.c = FALSE, prop.r = FALSE)
+# Convertimos la tabla en una matriz
+ct_matriz_3 <- as.matrix(CT_3$t)
+# Evaluamos el modelo con k = 5
+CT_5 <- CrossTable(x = test_labels, y = prot_fam_test_pred_5,
+           prop.chisq=FALSE, prop.c = FALSE, prop.r = FALSE)
+# Convertimos la tabla en una matriz
+ct_matriz_5 <- as.matrix(CT_5$t)
+# Evaluamos el modelo con k = 7
+CT_7 <- CrossTable(x = test_labels, y = prot_fam_test_pred_7,
+           prop.chisq=FALSE, prop.c = FALSE, prop.r = FALSE)
+# Convertimos la tabla en una matriz
+ct_matriz_7 <- as.matrix(CT_7$t)
+
+```
+
+#### Familia G
+
+Utilizamos nuestra función evaluacionModelo() para la familia G las
+distintas k
+
+```{r chunck_4_e_5}
+# familia G (0). Columna 1 de la matriz. Es decir, el parámetro positivo = 1
+
+# k = 1
+resultados.1G <- evaluacionModelo(ct_matriz_1, positivo = 1)
+# k = 3
+resultados.3G <- evaluacionModelo(ct_matriz_3, positivo = 1)
+# k = 5
+resultados.5G <- evaluacionModelo(ct_matriz_5, positivo = 1)
+# k = 7
+resultados.7G <- evaluacionModelo(ct_matriz_7, positivo = 1)
+```
+
+Parámetro|k = 1|k = 3|k = 5|k = 7
+:----|:----|:----:|:----:|:----:
+FP|`r resultados.1G$FP`|`r resultados.3G$FP`|`r resultados.5G$FP`|`r resultados.7G$FP`
+FN|`r resultados.1G$FN`|`r resultados.3G$FN`|`r resultados.5G$FN`|`r resultados.7G$FN`
+Error|`r resultados.1G$error_rate`|`r resultados.3G$error_rate`|`r resultados.5G$error_rate`|`r resultados.7G$error_rate`
+
+#### Familia T
+
+Utilizamos nuestra función evaluacionModelo() para la familia T las
+distintas k
+
+```{r chunck_4_e_6}
+# familia T (1). Columna 2 de la matriz. Es decir, el parámetro positivo = 2
+
+# k = 1
+resultados.1T <- evaluacionModelo(ct_matriz_1, positivo = 2)
+# k = 3
+resultados.3T <- evaluacionModelo(ct_matriz_3, positivo = 2)
+# k = 5
+resultados.5T <- evaluacionModelo(ct_matriz_5, positivo = 2)
+# k = 7
+resultados.7T <- evaluacionModelo(ct_matriz_7, positivo = 2)
+```
+
+Parámetro|k = 1|k = 3|k = 5|k = 7
+:----|:----|:----:|:----:|:----:
+FP|`r resultados.1T$FP`|`r resultados.3T$FP`|`r resultados.5T$FP`|`r resultados.7T$FP`
+FN|`r resultados.1T$FN`|`r resultados.3T$FN`|`r resultados.5T$FN`|`r resultados.7T$FN`
+Error|`r resultados.1T$error_rate`|`r resultados.3T$error_rate`|`r resultados.5T$error_rate`|`r resultados.7T$error_rate`
+
+### Valoración de los resultados
+
+Si nos fijamos en el error, en general hay más error en la familia G que en la T.
+En ambas familias el menor error se obtiene con el modelo knn con k = 1.  
+Si nos fijamos en las curvas ROC se obtienen mejores resultados para la família 
+G y con k = 5 y k = 7.
+
+
+NOTA: no tengo claro si el procedimeiento que he seguido para representar las 
+curvas ROC es correcto. La idea, como ya he comentado antes, era aprovechar las 
+probabilidades que nos da el la función knn() para todas las familias y después,
+con tal de obtener datos binarios, considerar que la familia de interés es 1 y 
+el resto de familias 0.
+
+
+# Referencias  
+
+```{r chunck_ref, echo=FALSE}
+
+# Bibliografía
+
+# Requerimos la librería bibtext
+require(bibtex)
+# Cargamos los datos del fichero .bib conseguido mediante google scholar
+bib_file <- "Referencias.bib"
+# Leemos los datos del fichero .bib
+bib_data <- read.bib(bib_file)
+# Mostramos el resultado
+bib_data
+```
+

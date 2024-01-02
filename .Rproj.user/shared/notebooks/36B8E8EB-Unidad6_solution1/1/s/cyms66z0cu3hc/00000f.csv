@@ -1,0 +1,7 @@
+"0","# create training and test data"
+"0","set.seed(params$seed.train)"
+"0","#n_train <- 2/3"
+"0","#n <- nrow(data_nrm)"
+"0","train <- sample(n,floor(n*params$p.train))"
+"0","dataset.train <- dataset[train,]"
+"0","dataset.test  <- dataset[-train,]"

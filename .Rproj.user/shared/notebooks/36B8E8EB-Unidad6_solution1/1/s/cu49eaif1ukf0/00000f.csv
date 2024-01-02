@@ -1,0 +1,3 @@
+"0","kable(as.data.frame(table(dataset$y)),"
+"0","      col.names= c(""clase"", ""Frecuencia""),"
+"0","      align= ""cc"")"

@@ -1,0 +1,30 @@
+"0","# look at basic information about the model
+modeloLineal
+"
+"1","Support Vector Machine object of class ""ksvm"""
+"1"," "
+"1","
+"
+"1","
+"
+"1","SV type: C-svc"
+"1","  (classification) 
+"
+"1"," parameter : cost C = 1 
+"
+"1","
+"
+"1","Linear (vanilla) kernel function. 
+"
+"1","
+Number of Support Vectors : 27 
+"
+"1","
+Objective Function Value :"
+"1"," "
+"1","-0.0332"
+"1"," "
+"1","
+"
+"1","Training error : 0 
+"

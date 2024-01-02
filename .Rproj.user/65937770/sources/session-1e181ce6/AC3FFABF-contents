@@ -1,0 +1,476 @@
+---
+title: 'Support Vector Machine (SVM)'
+author: Escribir vuestro nombre y apellidos
+subtitle: '`r params$subtitulo`'
+date: '`r format(Sys.Date(),"%e de %B, %Y")`' 
+# date: \today  (solo para pdf)
+output:
+  pdf_document:
+    keep_tex: no
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+  html_document:
+    toc: yes
+    toc_depth: 3
+nocite: |
+  @lantz2015machine
+  @max2017caret
+header-includes:
+  - \usepackage[spanish]{babel}
+params:
+  file1: colon2.csv
+  folder.data: ""
+  p.train: !r 2/3
+  subtitulo: Predicci?n del tipo de tejido normal/tumoral en c?ncer de col?n
+  seed.train: 12345
+  seed.otro: 1234567
+bibliography: PECs.bib
+geometry: margin=2cm
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NULL, cache=TRUE)
+options(width=90)
+```
+
+
+```{r packages, message=FALSE, echo=FALSE, warning=FALSE}
+usePackage <- function(p) {    
+    if (!is.element(p, installed.packages()[,1]))
+        install.packages(p, dep = TRUE)
+    require(p, character.only = TRUE)
+}
+usePackage("caret")
+usePackage("kernlab")
+usePackage("dplyr")
+usePackage("pROC")
+usePackage("knitr")
+```
+
+\pagebreak
+
+# Support Vector Machines (SVM)
+
+Las m?quinas de soporte vectorial, m?quinas de vectores de soporte o m?quinas de vector soporte (Support Vector Machines, SVMs) son un conjunto de algoritmos de aprendizaje supervisado, enfocados a resoluci?n de problemas de clasificaci?n y regresi?n. 
+
+Su objetivo es separar los datos, de forma que exista el mayor margen posible y de forma homog?nea. Se basa en el c?lculo de los hiperplanos en el espacio multidimensional creado con las distintas caracter?sticas.
+
+Se llama as? porque el hiperplano de separaci?n queda definido por las observaciones de cada clase m?s cercanas a ?ste.
+
+Algunas de las aplicaciones mencionadas en el libro son:
+
+- Clasificar genes diferencialmente expresados a partir de datos de microarrays.
+  
+- Clasificaci?n de texto en distintas categor?as tem?ticas.
+
+- Detecci?n de eventos cr?ticos de escasa frecuencia, como terremotos.
+
+Cuando los datos no son separables de forma lineal, es necesario el uso de kernels, o funciones de similitud y especificar un par?metro C para minimizar la funci?n de coste. La elecci?n de este par?metro es a base de ensayo/error, pero se buscan valores que no sean extremos en la b?squeda del equilibrio sesgo/varianza.
+
+Los kernels m?s populares son el lineal y el gausiano, aunque hay otros como el polinomial, string kernel, chi-square kernel. etc.
+
+## Fortalezas y debilidades
+
+
+Fortalezas | Debilidades
+------------------------------ | ------------------------------
+- Uso en predicci?n y clasificaci?n. Uso bastante extendido |- Requiere especificar par?metro C y funci?n de kernel (prueba y error)
+- Funciona de forma ?ptima con ruido |- Lento de entrenar, sobre todo a medida que aumenta el n?mero de caracter?sticas
+- Facilidad de uso en comparaci?n de las redes neuronales |-Al igual que las redes neuronales es dif?cil de interpretar el funcionamiento interno.
+
+
+
+
+# Predicci?n de c?ncer de colon con SVM: tejido normal o tumoral
+
+## Step 1 - Obtenci?n de los datos
+
+En primer lugar el programa lee ciertas variables necesarias para realizar el proceso como por ejemplo el fichero de datos. Estas variables pueden cambiadas en posteriores ejecuciones. 
+
+En lugar de leer la informaci?n se puede crear un chunk donde se realice la asignaci?n de estas variables. No es tan elegante y versatil como la primera opci?n.
+
+```{r asigna, echo=TRUE, eval=FALSE}
+#folder.data <- 
+#file1 <- "colon2.csv"
+#p.train: 0.6666667
+#  subtitulo: Predicci?n del tipo de tejido normal/tumoral en c?ncer de col?n
+#  seed.train: 12345
+#  seed.clsfier: 1234567
+```
+
+De esta manera separamos el proceso de lectura y, posterior an?lisis de la asignaci?n que puede cambiarse en el futuro.
+
+Ahora ya se importan los datos a formato data.frame
+
+```{r frag1,message=FALSE,warning=FALSE}
+m.file <- ifelse(params$folder.data=="", 
+                 params$file1,
+                 file.path(params$folder.data,params$file1))
+dataset <- read.csv(file=m.file) 
+#length(complete.cases(dataset))
+```
+
+El fichero *`r params$file1`* est?  formado por `r nrow(dataset)` observaciones y `r ncol(dataset)` variables. Adem?s, se verifica que todos las observaciones est?n completas y no hay que hacer ajustes por datos faltantes.
+
+Las variables son todas de tipo ordinal (num?rico entero), excepto la clase que es categ?rica con dos factores: 
+**`r toString(levels(dataset$y))`** que corresponden a tejido normal y tejido tumoral, respectivamente.
+
+
+## Step 2 - Exploraci?n y preparaci?n de los datos
+
+
+Para  tener un primer contacto con los datos, se presenta los seis primeros registros y las ultimas 5 variables: 
+
+```{r frag2, echo=FALSE}
+head(dataset[,(ncol(dataset)-4):ncol(dataset)])
+```
+
+Por otra parte, el n?mero de muestras de cada tipo es:
+
+```{r frag2.1,echo=FALSE}
+kable(as.data.frame(table(dataset$y)),
+      col.names= c("clase", "Frecuencia"),
+      align= "cc")
+```
+
+Para explorar la matriz de datos se ha decidido tomar unas muestras de las variables en lugar de realizar un estudio global.
+
+Para ello, se toma una muestra de 15 tejidos sanos y otra muestra de tejidos tumorales, analizando la distribuci?n de expresi?n g?nica en 10 genes aleatorios.
+
+```{r frag2.2,fig.height=4}
+indicesT <- which(dataset$y=='t')
+indicesN <- which(dataset$y=='n')
+set.seed(params$seed.train)
+aleatT <- sample(indicesT,15)
+set.seed(params$seed.train)
+aleatN <- sample(indicesN,15)
+
+#10 genes aleatorios
+set.seed(params$seed.train)
+aleatG <- sample(1:(ncol(dataset)-1),10)
+
+#Dataset "reducidos" con las muestras
+datasetT <- dataset[aleatT,aleatG]
+datasetN <- dataset[aleatN,aleatG]
+
+summary(datasetT)
+summary(datasetN)
+
+par(mfrow=c(1,2))
+boxplot(datasetN,cex.axis=0.6,ylab='Expresi?n',main="Tejido normal",las=2)
+abline(h = 500,col='red')
+boxplot(datasetT,cex.axis=0.6,ylab='Expresi?n', main="Tejido tumoral", las=2)
+abline(h = 500,col='red')
+```
+
+Como se observa, el rango de variaci?n de expresi?n en los genes es mucho mayor en le tejido tumoral que en el tejido normal. El n?mero de outliers tambi?n es mayor. Se pueden ver genes sobreexpresados y otros infraexpresados.
+
+El SVM no requiere realizar transformaciones normalizantes de los datos, as? que no se haran.  Otra opci?n seria transformar los datos y comparar los resultados transformando / sin transformar.
+
+### Partici?n de los datos en training/test
+
+
+```{r frag3}
+#n_train <- 2/3
+n <- nrow(dataset)
+```
+Se realiza una extracci?n de los datos *aleatoriamente* de `r round(params$p.train *100,2)`% de todas las observaciones, `r floor(params$p.train*n)`, para entrenar al modelo y del resto `r (n - floor(params$p.train*n))` para evaluarlo (test).
+
+```{r frag3.1}
+# create training and test data
+set.seed(params$seed.train)
+#n_train <- 2/3
+#n <- nrow(data_nrm)
+train <- sample(n,floor(n*params$p.train))
+dataset.train <- dataset[train,]
+dataset.test  <- dataset[-train,]
+```
+
+El porcentaje de muestras tumorales en los datos de training es de `r round((table(dataset.train$y)[1]/ nrow(dataset.train))*100,2)`%, y en los de test de `r round((table(dataset.test$y)[1]/ nrow(dataset.test))*100,2)`%. As? que, como el tama?o de la muestra es m?s bien bajo, se podr?a escoger otros m?todos como k-fold cross validation o bootstrap.
+
+## Step 3 - Entrenamiento del modelo.
+
+El algoritmo de SVM que se usa es la funci?n `ksvm()` del paquete *kernlab*, cuya sintaxis se muestra a continuaci?n:
+
+```{r frag4, out.width="300px", echo=FALSE,fig.align='center'}
+knitr::include_graphics("sintaxis.png",auto_pdf=FALSE)
+```
+
+Se construye el modelo m?s sencillo: lineal usando como kernel el valor `vanilladot`
+
+```{r frag5, warning=FALSE, message=FALSE}
+library(kernlab)
+set.seed(params$seed.clsfier)
+dataset.train$y <- factor(dataset.train$y)
+modeloLineal <- ksvm(y~.,data=dataset.train, kernel='vanilladot')
+
+# look at basic information about the model
+modeloLineal
+
+```
+
+Se puede observar que la funci?n lineal no tiene par?metros adicionales ('hiperparametros') al de coste.
+
+## Step 4 - Predicci?n y evaluaci?n del modelo
+
+Para ver c?mo generalizan el modelo y analizar su rendimiento se realiza la predicci?n con nuevos datos: los datos de test.
+
+```{r frag6}
+modLineal_pred <- predict(modeloLineal, dataset.test)
+
+```
+
+Se obtiene la matriz de confusi?n, usando la funci?n `confusionMatrix`.
+
+```{r frag7,warning=FALSE,message=FALSE}
+#M?tricas de rendimiento
+#library(caret)
+
+#Modelo lineal
+res <- table(modLineal_pred, dataset.test$y)
+(cmatrix1 <- confusionMatrix(res, positive="t"))
+```
+
+
+El modelo de SVM lineal con categoria positiva 'tumor' obtiene una precisi?n de `r round(cmatrix1$overall["Accuracy"], 3)` y una sensitividad y especificidad de `r round(cmatrix1$byClass["Sensitivity"], 3)` y `r round(cmatrix1$byClass["Specificity"], 3)` respectivamente.
+
+##Step 5 - Mejora del rendimiento del modelo
+
+Ahora se plantea SVM con un el kernel Gaussiano, `rbfdot` para tratar de mejorar el rendimiento.
+
+```{r frag8,warning=FALSE,message=FALSE,tidy=TRUE,fig.height=4  }
+set.seed(params$seed.clsfier)
+modeloGauss <- ksvm(y~.,data=dataset.train, 
+                     kernel='rbfdot')
+
+# look at basic information about the model
+modeloGauss
+
+
+#Predicci?n
+modGauss_pred <- predict(modeloGauss, dataset.test)
+
+```
+
+El resultado de la matriz de confusi?n con los datos de test es:
+
+
+```{r frag9,warning=FALSE,message=FALSE,tidy=TRUE}
+#M?tricas de rendimiento
+#library(caret)
+
+#Modelo lineal
+res <- table(modGauss_pred, dataset.test$y)
+
+# Results
+#require(caret)
+(cmatrix2 <- confusionMatrix(res,positive="t"))
+```
+
+
+El nuevo modelo de SVM con kernel gaussiano obtiene una precisi?n de `r round(cmatrix2$overall["Accuracy"], 3)` y una sensitividad y especificidad de `r round(cmatrix2$byClass["Sensitivity"], 3)` y `r round(cmatrix2$byClass["Specificity"], 3)` respectivamente. `r if(cmatrix1$overall["Accuracy"] > cmatrix2$overall["Accuracy"]){"Vemos que el modelo obtenido con SVM lineal tiene una mayor precisi?n"}``r if(cmatrix1$overall["Accuracy"] < cmatrix2$overall["Accuracy"]){"Vemos que el modelo obtenido con SVM gaussiano tiene una mayor precisi?n"}``r if(cmatrix1$overall["Accuracy"] == cmatrix2$overall["Accuracy"]){"Vemos que ambos modelos tienen la misma precisi?n"}`
+
+Al comparar los dos modelos si se ven resultados muy similares, se suele escoger el modelo m?s sencillo.
+
+Hay que equilibrar la complejidad y la precisi?n del modelo, ya que modelos m?s complejos tambi?n son m?s susceptibles de tener overfitting.
+
+## Paquete *caret*: modelo `svmLinear` / modelo `svmRadial` 
+
+Se construyen dos nuevos modelos con el objetivo de comprobar si la implementaci?n del paquete **caret** produce diferencias. En ambos casos se evalua el rendimiento con la partici?n train/test, k-fold cross validation y bootstrap.
+
+Para crear la partici?n de los datos en training/test se usa la funci?n `createDataPartition` del paquete **caret**.
+
+```{r frag17,warning=FALSE,message=FALSE}
+#library(caret)
+#Partici?n de datos
+set.seed(params$seed.train)
+# We wish 75% for the trainset 
+inTrain <- createDataPartition(y=dataset$y, p=params$p.train, list=FALSE)
+#dim(inTrain)
+
+train.set <- dataset[inTrain,]
+test.set  <- dataset[-inTrain,]
+
+nrow(train.set)/nrow(test.set) # should be around 2 if train=2/3
+
+```
+
+### SVM `svmLinear`: Train de 2/3 y 1/3 test
+
+```{r frag18,warning=FALSE,message=FALSE}
+# modelo solo de Train sin repeticion
+set.seed(params$seed.otro)
+model <- train(y ~ ., train.set, method='svmLinear', 
+               trControl= trainControl(method='none'), 
+               # preProcess = "range",
+               tuneGrid= NULL, trace = FALSE) #
+model
+
+prediction <- predict(model, test.set)                         # predict
+res <- table(prediction, test.set$y)                          # compare
+
+confusionMatrix(res, positive="t")   
+```
+
+Ahora se repite el modelo pero con los mismos datos de training/test usados en la funci?n `ksvm` con kernel `vanilladot` del paquete kernlab. 
+
+
+```{r frag18a,warning=FALSE,message=FALSE}
+# modelo solo de Train sin repeticion
+set.seed(params$seed.otro)
+model <- train(y ~ ., dataset.train, method='svmLinear', 
+               trControl= trainControl(method='none'), 
+               # preProcess = "range",
+               tuneGrid= NULL, trace = FALSE) #
+model
+
+prediction <- predict(model, dataset.test)                         # predict
+res <- table(prediction, dataset.test$y)                          # compare
+
+confusionMatrix(res, positive="t")   
+```
+
+
+Se obtiene los mismos resultados que antes.
+
+
+
+### SVM `svmLinear`: 5-fold crossvalidation
+
+```{r frag19,warning=FALSE,message=FALSE,fig.height=4}
+# modelo 5-crossvalidation 
+set.seed(params$seed.otro)
+model <- train(y ~ ., train.set, method='svmLinear', 
+               trControl= trainControl(method='cv', number=5), 
+                tuneGrid= NULL, trace = FALSE)
+
+
+model
+prediction <- predict(model, test.set)                           # predict
+res <- table(prediction, test.set$y)                             # compare
+
+confusionMatrix(res, positive="t")   
+```
+
+
+### SVM `svmLinear`: Bootstrap
+
+```{r frag20,warning=FALSE,message=FALSE,fig.height=4}
+# Por defecto es Bootstrap, con 25 repeticiones para 3 posibles decay
+# y 3 posibles sizes
+set.seed(params$seed.otro)
+model <- train(y ~ ., train.set, method='svmLinear', trace = FALSE) # train
+# we also add parameter 'preProc = c("center", "scale"))' at train() for centering and scaling the data
+
+
+model
+prediction <- predict(model, test.set)                           # predict
+res <- table(prediction, test.set$y)                                  # compare
+
+confusionMatrix(res, positive="t")                                 # compare
+
+```
+
+
+En todos los casos la predicci?n de los datos de test es identica.
+
+
+
+
+### SVM `svmRadial`: Train de 2/3 y 1/3 test
+
+
+
+```{r frag21,warning=FALSE,message=FALSE}
+# modelo solo de Train sin repeticion
+set.seed(params$seed.otro)
+model <- train(y ~ ., train.set, method='svmRadial', 
+               trControl= trainControl(method='none'), 
+               # preProcess = "range",
+               tuneGrid= NULL, trace = FALSE) #
+model
+
+prediction <- predict(model, test.set)                        # predict
+res <- table(prediction, test.set$y)                          # compare
+
+confusionMatrix(res, positive="t")   
+```
+
+Nuevamente, se repite el modelo pero con los mismos datos de training/test usados en la funci?n `ksvm` con kernel `rbfdot` del paquete kernlab. 
+
+```{r frag21a,warning=FALSE,message=FALSE}
+# modelo solo de Train sin repeticion
+set.seed(params$seed.otro)
+model <- train(y ~ ., dataset.train, method='svmRadial', 
+               trControl= trainControl(method='none'),
+               # preProcess = "range",
+               tuneGrid= NULL, trace = FALSE) #
+model
+
+prediction <- predict(model, dataset.test)                        # predict
+res <- table(prediction, dataset.test$y)                          # compare
+
+confusionMatrix(res, positive="t")   
+```
+
+
+No se obtiene el mismo resultado. No s? conoce la causa.
+
+### SVM `svmRadial`: 5-fold crossvalidation
+
+```{r frag22,warning=FALSE,message=FALSE,fig.height=4}
+# modelo 5-crossvalidation 
+set.seed(params$seed.otro)
+model <- train(y ~ ., train.set, method='svmRadial', 
+               trControl= trainControl(method='cv', number=5), 
+                tuneGrid= NULL, trace = FALSE)
+
+
+model
+prediction <- predict(model, test.set)                           # predict
+res <- table(prediction, test.set$y)                                  # compare
+
+confusionMatrix(res, positive="t")   
+```
+
+
+### SVM `svmRadial`: Bootstrap
+
+```{r frag23,warning=FALSE,message=FALSE,fig.height=4}
+# Por defecto es Bootstrap, con 25 repeticiones para 3 posibles decay
+# y 3 posibles sizes
+set.seed(params$seed.otro)
+model <- train(y ~ ., train.set, method='svmRadial', trace = FALSE) # train
+# we also add parameter 'preProc = c("center", "scale"))' at train() for centering and scaling the data
+
+
+model
+prediction <- predict(model, test.set)                           # predict
+res <- table(prediction, test.set$y)                                  # compare
+
+confusionMatrix(res, positive="t")                                 # compare
+
+```
+
+
+En todos los casos la predicci?n de los datos de test es identica. Peor que `svmLineal`.
+
+En conclusi?n, con los resultados obtenidos el modelo m?s adecuado es el `svmLineal`. 
+
+
+# Anexo: ?C?mo obtener informaci?n de un modelo del paquete caret?
+
+
+Las funciones `modelLookup` y `getModelInfo` dan informaci?n del modelo. Por ejemplo:
+
+```{r frag24,warning=FALSE,message=FALSE, echo=TRUE}
+modelLookup("svmLinear")
+getModelInfo('svmLinear', regex= FALSE)
+getModelInfo('svmRadial')
+modelLookup("svmRadial")
+```
+
+
+
+#Referencias

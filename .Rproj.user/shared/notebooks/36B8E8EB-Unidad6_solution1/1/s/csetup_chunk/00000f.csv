@@ -1,0 +1,2 @@
+"0","knitr::opts_chunk$set(echo = TRUE, comment = NULL, cache=TRUE)"
+"0","options(width=90)"

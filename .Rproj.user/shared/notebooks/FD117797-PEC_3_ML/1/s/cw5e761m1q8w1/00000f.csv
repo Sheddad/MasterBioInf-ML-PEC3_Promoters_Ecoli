@@ -1,0 +1,7 @@
+"0","# Cargamos el archivo promoters.txt en un DataFrame"
+"0","promoters_df <- read.table(data, header = FALSE, sep = "","")"
+"0",""
+"0","# Obtenemos el número de filas y columnas"
+"0","dimensiones <- dim(promoters_df)"
+"0","filas <- dimensiones[1]"
+"0","columnas <- dimensiones[2]"

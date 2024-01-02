@@ -1,0 +1,6 @@
+"0","nrow(data.train.caret)/nrow(data.test.caret) # should be around 2 if train=2/3
+"
+"1","[1]"
+"1"," 2.088235"
+"1","
+"
