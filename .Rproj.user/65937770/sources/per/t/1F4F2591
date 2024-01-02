@@ -3,7 +3,7 @@
     "path": "~/Escriptori/UOC/3r SEMESTRE/MACHINE LEARNING/PEC_3_ML/PEC_3_ML.Rmd",
     "project_path": "PEC_3_ML.Rmd",
     "type": "r_markdown",
-    "hash": "0",
+    "hash": "1416339500",
     "contents": "",
     "dirty": false,
     "created": 1703922431931.0,
@@ -12,16 +12,16 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "30,21",
-        "scrollLine": "21",
+        "cursorPosition": "321,2",
+        "scrollLine": "305",
         "docOutlineVisible": "1"
     },
     "folds": "",
-    "lastKnownWriteTime": 1704217372,
+    "lastKnownWriteTime": 1704221245,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1704217372653,
+    "last_content_update": 1704221245881,
     "read_only": false,
     "read_only_alternatives": []
 }

@@ -29,6 +29,7 @@ params:
 nocite: |
   @lantz2015machine
   @HarleyReynolds1987
+  @pec_ml_3
 bibliography: PEC_3_ML.bib
 geometry: margin=2cm
 ---
@@ -57,6 +58,7 @@ if(!(require(knitr))) install.packages("knitr")
 if(!(require(rmdformats))) install.packages("rmdformats")
 if(!(require(kernlab))) install.packages("kernlab")
 if(!(require(caret))) install.packages("caret")
+if(!(require(ggplot2))) install.packages("ggplot2")
 if(!(require(bibtex))) install.packages("bibtex")
 ```
 
@@ -311,7 +313,13 @@ data.test.caret <- data.test.caret[, -2]
 nrow(data.train.caret)/nrow(data.test.caret) 
 ```
 
-
+Una característica interesante de `createDataPartition` es que es una función 
+que divide un conjunto de datos en datos de entrenamiento y prueba de manera 
+estratificada. En nuestro caso, mantiene la proporción de clases promotor (+) y 
+no promotor (-) en cada uno de los subconjuntos de datos, train/test.  
+De esta manera nos aseguramos que tanto el conjunto de entrenamiento como el de 
+prueba sean representativos del conjunto cpmpleto de datos.
+  
 ### svmLinear
 
 Creamos el modelo SVM lineal con los datos de entrenamiento del paquete `caret`.
@@ -447,6 +455,10 @@ observamos que tanto el modelo *SVM lineal* como *3-fold crossvalidation* nos
 dan los mismos resultados. Estos modelos dan mejores resultados (accuracy, kappa) 
 que los anteriores.  
 
+Es factible que esto se deba al hecho de que `createDataPartition` intenta 
+estratificar los datos de train y test para mantener las proporciones de la 
+variable categórica *class* en ambos conjuntos.
+  
 ## e)  Evaluación kernel RBF
 
 **Evaluar el rendimiento del algoritmo SVM con kernel RBF para diferentes 
@@ -524,3 +536,4 @@ sencillo, el *SVM lineal*.
 
 
 # Referencias  
+

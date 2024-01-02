@@ -823,6 +823,14 @@ data.test.caret &lt;- data.test.caret[, -2]
 # Para comprobar si la partición es válida. Debe dar sobre 2 en el caso de 2/3
 nrow(data.train.caret)/nrow(data.test.caret)</code></pre>
 <pre><code>[1] 2.088235</code></pre>
+<p>Una característica interesante de <code>createDataPartition</code> es
+que es una función que divide un conjunto de datos en datos de
+entrenamiento y prueba de manera estratificada. En nuestro caso,
+mantiene la proporción de clases promotor (+) y no promotor (-) en cada
+uno de los subconjuntos de datos, train/test.<br />
+De esta manera nos aseguramos que tanto el conjunto de entrenamiento
+como el de prueba sean representativos del conjunto cpmpleto de
+datos.</p>
 <div id="svmlinear" class="section level3">
 <h3>svmLinear</h3>
 <p>Creamos el modelo SVM lineal con los datos de entrenamiento del
@@ -1069,6 +1077,10 @@ escoger el modelo más simple.</p>
 <em>SVM lineal</em> como <em>3-fold crossvalidation</em> nos dan los
 mismos resultados. Estos modelos dan mejores resultados (accuracy,
 kappa) que los anteriores.</p>
+<p>Es factible que esto se deba al hecho de que
+<code>createDataPartition</code> intenta estratificar los datos de train
+y test para mantener las proporciones de la variable categórica
+<em>class</em> en ambos conjuntos.</p>
 </div>
 </div>
 <div id="e-evaluación-kernel-rbf" class="section level2">
@@ -1210,6 +1222,9 @@ Sequences.”</span> <em>Nucleic Acids Research</em> 15: 2343–61. <a href="htt
 <div id="ref-lantz2015machine" class="csl-entry">
 Lantz, Brett. 2015. <em>Machine Learning with r</em>. Packt Publishing
 Ltd. <a href="http://www.packtpub.com/books/content/machine-learning-r">http://www.packtpub.com/books/content/machine-learning-r</a>.
+</div>
+<div id="ref-pec_ml_3" class="csl-entry">
+SKF. n.d. <span>“<span>Repositorio PEC 3</span>.”</span> <a href="https://github.com/Sheddad/MasterBioInf-ML-PEC3_Promoters_Ecoli.git">https://github.com/Sheddad/MasterBioInf-ML-PEC3_Promoters_Ecoli.git</a>.
 </div>
 </div>
 </div>
