@@ -24,7 +24,7 @@ params:
     input: file
   folder.data: ""
   p.train: !r 2/3
-  subtitulo: Prediicción de promotores E.coli
+  subtitulo: Predicción de promotores E.coli
   seed: 12345
 nocite: |
   @lantz2015machine
@@ -521,7 +521,7 @@ ksvm.RBF|`r conf.mat.ksvm.RBF$overall["Accuracy"]`|`r conf.mat.ksvm.RBF$overall[
 ksvm.RBF|`r conf.mat.ksvm.RBF$overall["Accuracy"]`|`r conf.mat.ksvm.RBF$overall["Kappa"]`
 svmLiear|`r conf.mat.svmLinear$overall["Accuracy"]`|`r conf.mat.svmLinear$overall["Kappa"]`
 3-fold CV|`r conf.mat.3fold.cross$overall["Accuracy"]`|`r conf.mat.3fold.cross$overall["Kappa"]`
-svmLiear(caret)|`r conf.mat.svmLinear.caret$overall["Accuracy"]`|`r conf.mat.svmLinear.caret$overall["Kappa"]`
+svmLinear(caret)|`r conf.mat.svmLinear.caret$overall["Accuracy"]`|`r conf.mat.svmLinear.caret$overall["Kappa"]`
 3-fold CV(caret)|`r conf.mat.3fold.cross.caret$overall["Accuracy"]`|`r conf.mat.3fold.cross.caret$overall["Kappa"]`
   
   
